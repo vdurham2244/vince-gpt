@@ -14,6 +14,9 @@ import OpenAIHandler from './openai-handler.js';
 import DatabaseHandler from './database-handler.js';
 import { config } from './src/config.js';
 
+// Add base URL handling for assets
+const BASE_URL = import.meta.env.BASE_URL || '/';
+
 // Initialize the app
 async function initApp() {
     try {
@@ -130,8 +133,8 @@ async function initApp() {
 
         // Set up DRACO loader for the compressed model
         const dracoLoader = new DRACOLoader();
-        // Always use the Google CDN for the DRACO decoder to avoid build issues
-        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+        // Use unpkg CDN for the DRACO decoder to ensure it works in production
+        dracoLoader.setDecoderPath('https://unpkg.com/three@0.162.0/examples/jsm/libs/draco/');
         dracoLoader.setDecoderConfig({ type: 'js' }); // Use JavaScript decoder
 
         // Load the GLTF model with DRACO compression
@@ -151,7 +154,7 @@ async function initApp() {
 
 
         loader.load(
-            '/vince3.glb',
+            `${BASE_URL}vince3.glb`,
             (gltf) => {
                 console.log('Model loaded:', gltf);
                 // Remove loading indicator

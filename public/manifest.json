@@ -2,20 +2,24 @@
     "name": "Vince AI",
     "short_name": "Vince",
     "description": "Your Digital Companion - An interactive 3D AI character you can chat with",
-    "start_url": "/",
+    "start_url": "./",
+    "scope": "./",
     "display": "standalone",
     "background_color": "#f5f7fa",
     "theme_color": "#3498db",
+    "orientation": "portrait",
     "icons": [
         {
-            "src": "/icon-192x192.png",
+            "src": "icon-192x192.png",
             "sizes": "192x192",
-            "type": "image/png"
+            "type": "image/png",
+            "purpose": "any maskable"
         },
         {
-            "src": "/icon-512x512.png",
+            "src": "icon-512x512.png",
             "sizes": "512x512",
-            "type": "image/png"
+            "type": "image/png",
+            "purpose": "any maskable"
         }
     ]
 } 

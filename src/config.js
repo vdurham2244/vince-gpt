@@ -27,11 +27,29 @@ class Config {
                 .map(([key]) => key);
 
             if (missingVars.length > 0) {
-                throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+                throw new Error(
+                    `Missing required environment variables: ${missingVars.join(', ')}. ` +
+                    'Please ensure all environment variables are set in your Vercel project settings.'
+                );
+            }
+
+            // Log success in development only
+            if (import.meta.env.DEV) {
+                console.log('Configuration loaded successfully');
             }
         } catch (error) {
             console.error('Failed to load configuration:', error);
-            throw error;
+            
+            // In development, show more detailed error
+            if (import.meta.env.DEV) {
+                throw error;
+            } else {
+                // In production, show user-friendly error
+                throw new Error(
+                    'Unable to load application configuration. ' +
+                    'If you are the developer, please check your Vercel environment variables.'
+                );
+            }
         }
     }
 
@@ -39,7 +57,11 @@ class Config {
         if (!this.#config) {
             throw new Error('Configuration not initialized. Call init() first.');
         }
-        return this.#config[key];
+        const value = this.#config[key];
+        if (!value) {
+            throw new Error(`Configuration value for ${key} is not set.`);
+        }
+        return value;
     }
 }
 
