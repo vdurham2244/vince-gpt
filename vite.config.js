@@ -2,7 +2,6 @@ import { defineConfig } from 'vite';
 import path from 'path';
 
 export default defineConfig({
-    base: '/vince-app/',
     server: {
         port: 5173,
         open: true
@@ -15,16 +14,22 @@ export default defineConfig({
         terserOptions: {
             compress: {
                 drop_console: true,
-                drop_debugger: true
+                drop_debugger: true,
+                pure_funcs: ['console.log']
+            },
+            format: {
+                comments: false
             }
         },
         rollupOptions: {
             output: {
                 manualChunks: {
                     'three': ['three'],
-                    'vendor': ['three/examples/jsm/loaders/GLTFLoader.js', 
-                              'three/examples/jsm/loaders/DRACOLoader.js',
-                              'three/examples/jsm/controls/OrbitControls.js']
+                    'vendor': [
+                        'three/examples/jsm/loaders/GLTFLoader.js', 
+                        'three/examples/jsm/loaders/DRACOLoader.js',
+                        'three/examples/jsm/controls/OrbitControls.js'
+                    ]
                 }
             }
         }
@@ -34,5 +39,6 @@ export default defineConfig({
             '@': path.resolve(__dirname, './src')
         }
     },
-    publicDir: 'public'
+    publicDir: 'public',
+    envPrefix: 'VITE_'
 }); 
