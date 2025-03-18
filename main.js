@@ -120,6 +120,34 @@ async function initApp() {
         );
         camera.position.z = isMobile ? 3.5 : 3.0; // Adjust camera distance for mobile
         camera.position.y = 0;
+        
+        // Add function to adjust camera for keyboard - expose it globally
+        window.adjustCameraForKeyboard = function(keyboardOpen) {
+            if (keyboardOpen) {
+                // Adjust camera to focus on the face when keyboard is open
+                if (isMobile) {
+                    // Move camera closer and up slightly when keyboard is open
+                    camera.position.z = 2.8;
+                    camera.position.y = 0.2;
+                    
+                    // Focus controls on the face
+                    if (controls) {
+                        controls.target.set(0, 0.2, 0);
+                        controls.update();
+                    }
+                }
+            } else {
+                // Reset to default position when keyboard is closed
+                camera.position.z = isMobile ? 3.5 : 3.0;
+                camera.position.y = 0;
+                
+                // Reset controls target
+                if (controls) {
+                    controls.target.set(0, 0, 0);
+                    controls.update();
+                }
+            }
+        };
 
         // Renderer setup with mobile optimizations
         const renderer = new THREE.WebGLRenderer({

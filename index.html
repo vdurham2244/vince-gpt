@@ -41,16 +41,18 @@
         }
 
         #scene-container {
-            position: absolute;
+            position: fixed;
             width: 100%;
             height: 100%;
             z-index: 1;
-            transform: translateY(0);
-            transition: transform 0.3s ease;
+            transition: all 0.3s ease;
         }
 
         .keyboard-open #scene-container {
-            transform: translateY(-45vh);
+            height: 50vh;
+            transform: translateY(0);
+            bottom: auto;
+            top: 0;
         }
 
         .welcome-text {
@@ -58,17 +60,25 @@
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            font-size: clamp(1.4rem, 4vw, 1.8rem);
+            font-size: clamp(1.2rem, 3.5vw, 1.6rem);
             color: #2c3e50;
             text-align: center;
             background: rgba(255, 255, 255, 0.95);
-            padding: 12px 25px;
+            padding: 10px 22px;
             border-radius: 20px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
             backdrop-filter: blur(10px);
             z-index: 2;
-            white-space: nowrap;
+            white-space: normal;
+            max-width: 90vw;
             transition: all 0.3s ease;
+        }
+
+        @media (min-width: 768px) {
+            .welcome-text {
+                white-space: nowrap;
+                max-width: none;
+            }
         }
 
         #chat-interface {
@@ -132,7 +142,7 @@
             .welcome-text {
                 top: 10px;
                 font-size: 1rem;
-                padding: 8px 16px;
+                padding: 6px 12px;
             }
 
             #chat-interface {
@@ -141,7 +151,8 @@
             }
 
             .keyboard-open #scene-container {
-                transform: translateY(-40vh);
+                transform: translateY(-20vh) scale(0.85);
+                transform-origin: center center;
             }
         }
 
@@ -156,14 +167,28 @@
             }
 
             .keyboard-open #scene-container {
-                transform: translateY(-42vh);
+                transform: translateY(-30vh) scale(0.9);
+                transform-origin: center center;
             }
         }
 
-        /* Add iOS-specific adjustments */
+        /* Additional iOS-specific adjustments */
         @supports (-webkit-touch-callout: none) {
             .keyboard-open #scene-container {
-                transform: translateY(-45vh) scale(0.9);
+                height: 45vh;
+                transform: scale(1.15);
+                transform-origin: center 30%;
+                overflow: visible;
+            }
+        }
+
+        /* iPhone 13/small screen specific styles */
+        @media screen and (max-width: 390px) and (-webkit-device-pixel-ratio: 3) {
+            .keyboard-open #scene-container {
+                height: 40vh;
+                transform: scale(1.2);
+                transform-origin: center 20%;
+                top: 0;
             }
         }
 
@@ -292,28 +317,69 @@
         
         if (isMobile) {
             let viewportHeight = window.innerHeight;
+            const welcomeTextElement = document.querySelector('.welcome-text');
             
             chatInput.addEventListener('focus', () => {
                 body.classList.add('keyboard-open');
+                
+                // Hide the welcome text when keyboard is open
+                welcomeTextElement.style.opacity = '0';
+                welcomeTextElement.style.visibility = 'hidden';
                 
                 // iOS-specific adjustments
                 if (isIOS) {
                     // Save the original viewport height
                     viewportHeight = window.innerHeight;
                     
-                    // Add a small delay to let the keyboard fully open
-                    setTimeout(() => {
-                        const keyboardHeight = viewportHeight - window.innerHeight;
-                        sceneContainer.style.bottom = `${keyboardHeight}px`;
-                    }, 300);
+                    // Get device details for iPhone model-specific adjustments
+                    const isIPhone13OrSimilar = window.screen.height <= 850 && window.screen.width <= 390;
+                    const isIPhonePlus = window.screen.width > 390;
+                    
+                    if (isIPhone13OrSimilar) {
+                        // iPhone 13, 12, SE, etc.
+                        sceneContainer.style.height = '40vh';
+                        sceneContainer.style.transform = 'scale(1.2)';
+                        sceneContainer.style.transformOrigin = 'center 20%';
+                    } else if (isIPhonePlus) {
+                        // iPhone Plus/Pro Max models
+                        sceneContainer.style.height = '45vh';
+                        sceneContainer.style.transform = 'scale(1.15)';
+                        sceneContainer.style.transformOrigin = 'center 30%';
+                    } else {
+                        // Default iOS adjustments
+                        sceneContainer.style.height = '45vh';
+                        sceneContainer.style.transform = 'scale(1.15)';
+                        sceneContainer.style.transformOrigin = 'center 30%';
+                    }
+                    
+                    // Force camera position to center on the face in main.js
+                    if (window.adjustCameraForKeyboard) {
+                        window.adjustCameraForKeyboard(true);
+                    }
                 }
             });
             
             chatInput.addEventListener('blur', () => {
                 body.classList.remove('keyboard-open');
+                
+                // Show the welcome text again
+                welcomeTextElement.style.opacity = '1';
+                welcomeTextElement.style.visibility = 'visible';
+                
                 if (isIOS) {
-                    sceneContainer.style.bottom = '0';
+                    // Reset all styles
+                    sceneContainer.style.height = '';
+                    sceneContainer.style.transform = '';
+                    sceneContainer.style.transformOrigin = '';
+                    sceneContainer.style.top = '';
+                    sceneContainer.style.bottom = '';
+                    
+                    // Reset camera position in main.js
+                    if (window.adjustCameraForKeyboard) {
+                        window.adjustCameraForKeyboard(false);
+                    }
                 }
+                
                 // Reset scroll position with a small delay
                 setTimeout(() => {
                     window.scrollTo(0, 0);
