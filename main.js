@@ -32,6 +32,46 @@ async function initApp() {
             config.get('SUPABASE_ANON_KEY')
         );
 
+        // Handle audio permission response
+        document.addEventListener('audioPermissionResponse', async (event) => {
+            if (event.detail.enabled) {
+                console.log('Audio permission granted, initializing audio context');
+                try {
+                    // Ensure we initialize during a user gesture for mobile
+                    const success = await voiceSynthesis.initializeAudioContext();
+                    console.log('Audio initialization success:', success);
+                    
+                    if (!success && (voiceSynthesis.isIOS || voiceSynthesis.isMobile)) {
+                        console.log('Initial audio context setup failed, will retry on first user interaction');
+                        // Add a fallback for mobile
+                        document.body.addEventListener('click', async function audioUnlockHandler() {
+                            // Try again on first click
+                            await voiceSynthesis.initializeAudioContext();
+                            // Remove the listener after first attempt
+                            document.body.removeEventListener('click', audioUnlockHandler);
+                        }, { once: true });
+                    }
+                } catch (err) {
+                    console.error('Error during audio initialization:', err);
+                }
+            }
+        });
+
+        // Handle test audio playback
+        document.addEventListener('playTestAudio', async () => {
+            try {
+                console.log('Attempting to play test audio');
+                // First try playing a simple test sound
+                await voiceSynthesis.playTestSound();
+                
+                // Then try the welcome message
+                const welcomeMessage = "Hi! I'm Vince, and I'm happy to talk with you!";
+                await voiceSynthesis.playSpeech(welcomeMessage, config.get('ELEVENLABS_VOICE_ID'));
+            } catch (error) {
+                console.error('Error playing welcome message:', error);
+            }
+        });
+
         // Set initial system prompt
         const initialSystemPrompt = `You are Vince, a charismatic and engaging AI companion. Keep your responses natural and conversational, as if we're having a friendly chat.
 
@@ -293,6 +333,22 @@ async function initApp() {
                 chatInput.value = '';
                 
                 try {
+                    // Check audio context on each message - this helps with iOS
+                    if (voiceSynthesis.audioContext && 
+                        voiceSynthesis.audioContext.state === 'suspended') {
+                        console.log('Chat message: attempting to resume suspended audio context');
+                        try {
+                            await voiceSynthesis.audioContext.resume();
+                            // If we've just resumed successfully, mark audio as enabled
+                            if (voiceSynthesis.audioContext.state === 'running' && !voiceSynthesis.isAudioEnabled) {
+                                console.log('Audio context resumed during chat, enabling audio');
+                                voiceSynthesis.isAudioEnabled = true;
+                            }
+                        } catch (audioErr) {
+                            console.warn('Failed to resume audio in chat:', audioErr);
+                        }
+                    }
+                    
                     // Generate a response using OpenAI
                     const response = await responseHandler.generateResponse(message);
                     console.log('Bot response:', response);
@@ -300,11 +356,26 @@ async function initApp() {
                     // Log the question and response to the database
                     await databaseHandler.logQuestion(message, response);
                     
-                    // Get the duration of the synthesized speech
-                    const duration = await voiceSynthesis.playSpeech(response, config.get('ELEVENLABS_VOICE_ID'));
-                    
-                    // Start the face animation with the exact duration of the speech
-                    startTalking(duration);
+                    // Get the duration of the synthesized speech if audio is enabled
+                    if (voiceSynthesis.isAudioEnabled || voiceSynthesis.audioContext) {
+                        console.log('Attempting to play speech response');
+                        try {
+                            const duration = await voiceSynthesis.playSpeech(response, config.get('ELEVENLABS_VOICE_ID'));
+                            // Start the face animation with the exact duration of the speech
+                            startTalking(duration || 3000); // Fallback duration if 0 is returned
+                        } catch (speechErr) {
+                            console.error('Error playing speech:', speechErr);
+                            // Fallback to approximate duration
+                            const wordCount = response.split(/\s+/).length;
+                            const approxDuration = 1000 + (wordCount * 200);
+                            startTalking(approxDuration);
+                        }
+                    } else {
+                        // Fallback to approximate duration if voice synthesis is disabled
+                        const wordCount = response.split(/\s+/).length;
+                        const approxDuration = 1000 + (wordCount * 200);
+                        startTalking(approxDuration);
+                    }
                 } catch (error) {
                     console.error('Error handling chat message:', error);
                     // Fallback to approximate duration if voice synthesis fails

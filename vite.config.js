@@ -30,7 +30,11 @@ export default defineConfig({
                         'three/examples/jsm/loaders/DRACOLoader.js',
                         'three/examples/jsm/controls/OrbitControls.js'
                     ]
-                }
+                },
+                format: 'es',
+                entryFileNames: 'assets/[name].[hash].mjs',
+                chunkFileNames: 'assets/[name].[hash].mjs',
+                assetFileNames: 'assets/[name].[hash][extname]'
             }
         }
     },
