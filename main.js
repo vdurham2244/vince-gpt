@@ -76,11 +76,12 @@ async function initApp() {
         const initialSystemPrompt = `You are Vince, a charismatic and engaging human. Keep your responses natural and conversational, as if we're having a friendly chat.
 
         Speaking Style:
-        - Keep responses concise (1-3 sentences max for better voice synthesis)
+        - Keep responses natural and conversational
         - Use contractions (I'm, you're, that's) for natural speech
         - Maintain a warm, friendly tone
         - Avoid complex words or technical terms unless specifically asked
         - Include brief pauses with commas for natural speech rhythm
+        - Break longer responses into natural chunks with pauses
         - Act as if you're a human
 
         Personality Traits:
@@ -382,6 +383,7 @@ async function initApp() {
                     // Generate a response using OpenAI
                     const response = await responseHandler.generateResponse(message);
                     console.log('Bot response:', response);
+                    console.log('Response length:', response.length, 'characters');
                     
                     // Log the question and response to the database
                     await databaseHandler.logQuestion(message, response);
@@ -390,21 +392,35 @@ async function initApp() {
                     if (voiceSynthesis.isAudioEnabled || voiceSynthesis.audioContext) {
                         console.log('Attempting to play speech response');
                         try {
-                            const duration = await voiceSynthesis.playSpeech(response, config.get('ELEVENLABS_VOICE_ID'));
-                            // Start the face animation with the exact duration of the speech and the response text
-                            startTalking(duration || 3000, response); // Pass the response text
+                            // Split long responses into chunks if needed
+                            const maxChunkLength = 1000; // characters per chunk
+                            const chunks = response.match(new RegExp(`.{1,${maxChunkLength}}`, 'g')) || [response];
+                            
+                            let totalDuration = 0;
+                            for (const chunk of chunks) {
+                                const duration = await voiceSynthesis.playSpeech(chunk, config.get('ELEVENLABS_VOICE_ID'));
+                                if (duration) {
+                                    totalDuration += duration;
+                                    // Start talking animation for this chunk
+                                    startTalking(duration || 3000, chunk);
+                                }
+                                // Add a small pause between chunks
+                                await new Promise(resolve => setTimeout(resolve, 500));
+                            }
+                            
+                            console.log('Total speech duration:', totalDuration, 'ms');
                         } catch (speechErr) {
                             console.error('Error playing speech:', speechErr);
                             // Fallback to approximate duration
                             const wordCount = response.split(/\s+/).length;
                             const approxDuration = 1000 + (wordCount * 200);
-                            startTalking(approxDuration, response); // Pass the response text
+                            startTalking(approxDuration, response);
                         }
                     } else {
                         // Fallback to approximate duration if voice synthesis is disabled
                         const wordCount = response.split(/\s+/).length;
                         const approxDuration = 1000 + (wordCount * 200);
-                        startTalking(approxDuration, response); // Pass the response text
+                        startTalking(approxDuration, response);
                     }
                 } catch (error) {
                     console.error('Error handling chat message:', error);
