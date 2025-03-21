@@ -41,7 +41,7 @@ class OpenAIHandler {
                     model: 'gpt-4o-mini', // You can change this to your preferred model
                     messages: messages,
                     temperature: 0.7,
-                    max_tokens: 150
+                    max_tokens: 1500
                 })
             });
 
