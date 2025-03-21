@@ -222,7 +222,7 @@ async function initApp() {
 
 
         loader.load(
-            `${BASE_URL}vince3.glb`,
+            `${BASE_URL}vince.glb`,
             (gltf) => {
                 console.log('Model loaded:', gltf);
                 // Remove loading indicator
