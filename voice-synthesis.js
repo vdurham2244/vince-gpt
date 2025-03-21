@@ -192,9 +192,9 @@ class VoiceSynthesis {
     }
 
     async synthesizeSpeech(text, voiceId) {
+        // If audio isn't enabled yet, log a warning but still proceed with the request
         if (!this.isAudioEnabled) {
-            console.warn('Audio is not enabled. Cannot synthesize speech.');
-            return null;
+            console.warn('Audio is not fully enabled, but will still attempt to synthesize speech');
         }
 
         if (!voiceId) {
@@ -299,10 +299,39 @@ class VoiceSynthesis {
     // Helper method to play with WebAudio
     async _playWithWebAudio(audioData) {
         try {
-            const audioBuffer = await this.audioContext.decodeAudioData(audioData);
+            // Make sure audio context is ready
+            if (this.audioContext.state !== 'running') {
+                console.log('Resuming audio context before decoding audio data');
+                await this.audioContext.resume();
+                
+                // For iOS, additional attempts may be needed
+                if (this.isIOS && this.audioContext.state !== 'running') {
+                    await this._unlockAudioiOS();
+                }
+            }
+            
+            // Decode the audio data
+            let audioBuffer;
+            try {
+                audioBuffer = await this.audioContext.decodeAudioData(audioData);
+            } catch (decodeError) {
+                console.error('Failed to decode audio data:', decodeError);
+                
+                // If decode fails, try one more time after resuming context
+                if (this.audioContext.state !== 'running') {
+                    await this.audioContext.resume();
+                    audioBuffer = await this.audioContext.decodeAudioData(audioData);
+                } else {
+                    throw decodeError;
+                }
+            }
+            
             const source = this.audioContext.createBufferSource();
             source.buffer = audioBuffer;
             source.connect(this.audioContext.destination);
+            
+            // Mark audio as enabled since we've successfully decoded audio
+            this.isAudioEnabled = true;
             
             return {
                 source,
@@ -310,41 +339,224 @@ class VoiceSynthesis {
             };
         } catch (e) {
             console.error('WebAudio playback setup failed:', e);
+            
+            // Try HTML5 Audio as fallback if WebAudio fails
+            if (this.isIOS18Plus || this.isMobile) {
+                try {
+                    console.log('Attempting HTML5 Audio fallback after WebAudio failure');
+                    const blob = new Blob([audioData], { type: 'audio/mpeg' });
+                    const audioUrl = URL.createObjectURL(blob);
+                    const audio = new Audio(audioUrl);
+                    
+                    // Create a promise that resolves when audio can play
+                    const canPlayPromise = new Promise((resolve) => {
+                        audio.addEventListener('canplaythrough', () => {
+                            resolve(true);
+                        }, { once: true });
+                        
+                        // Also set a timeout in case the event never fires
+                        setTimeout(() => resolve(false), 2000);
+                    });
+                    
+                    // Wait for audio to be ready
+                    const canPlay = await canPlayPromise;
+                    if (canPlay) {
+                        // Start playing and return a dummy source
+                        await audio.play();
+                        this.isAudioEnabled = true;
+                        return {
+                            source: { start: () => {} }, // Dummy source
+                            duration: audio.duration ? audio.duration * 1000 : 3000 // Use duration or fallback to 3s
+                        };
+                    }
+                } catch (htmlAudioError) {
+                    console.error('HTML5 Audio fallback also failed:', htmlAudioError);
+                }
+            }
+            
             return { source: null, duration: 0 };
         }
     }
 
     async playSpeech(text, voiceId) {
-        if (!this.isAudioEnabled) {
-            console.warn('Audio is not enabled. Cannot play speech.');
+        // First, always try to ensure audio is initialized
+        if (!this.isAudioEnabled || (this.audioContext && this.audioContext.state !== 'running')) {
+            console.log('Audio needs initialization, attempting to initialize/resume...');
             
-            // Try to re-enable audio on demand
-            if (this.isMobile || this.isIOS) {
-                console.log('Attempting to re-enable audio for speech...');
+            // Try to initialize or resume the audio context
+            if (!this.audioContext) {
                 await this.initializeAudioContext();
+            } else if (this.audioContext.state === 'suspended') {
+                await this.audioContext.resume();
                 
-                // If still not enabled, return
-                if (!this.isAudioEnabled) {
-                    console.error('Failed to enable audio for speech');
-                    return 0;
+                // For mobile devices, use additional unlock methods
+                if ((this.isMobile || this.isIOS) && this.audioContext.state !== 'running') {
+                    await this._unlockAudioiOS();
                 }
+            }
+            
+            // Update status after initialization attempt
+            if (this.audioContext && this.audioContext.state === 'running') {
+                this.isAudioEnabled = true;
+                console.log('Successfully initialized audio context for speech');
             } else {
-                return 0;
+                console.warn('Audio initialization partially successful, will still try to play');
             }
         }
 
         try {
-            // Resume context before synthesizing if using WebAudio
+            // Check if text is too long for ElevenLabs API (they have a 5000 character limit)
+            const MAX_TEXT_LENGTH = 4800; // Leave some margin
+            
+            if (text.length > MAX_TEXT_LENGTH) {
+                console.log(`Text length (${text.length}) exceeds ElevenLabs limit, processing as one request but with handling`);
+                
+                // Create a combined audio buffer from multiple API calls
+                const parts = [];
+                
+                // Split text into sentences to maintain natural speech boundaries
+                const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
+                
+                // If no sentences found or just one, use the original text
+                if (sentences.length <= 1) {
+                    // Fall back to character-based chunking
+                    for (let i = 0; i < text.length; i += MAX_TEXT_LENGTH) {
+                        parts.push(text.substring(i, Math.min(i + MAX_TEXT_LENGTH, text.length)));
+                    }
+                } else {
+                    // Group sentences to stay under the limit
+                    let currentChunk = "";
+                    for (const sentence of sentences) {
+                        if ((currentChunk + sentence).length > MAX_TEXT_LENGTH) {
+                            // Current chunk is full, start a new one
+                            if (currentChunk) parts.push(currentChunk);
+                            currentChunk = sentence;
+                        } else {
+                            // Add sentence to current chunk
+                            currentChunk += sentence;
+                        }
+                    }
+                    
+                    // Add the last chunk if not empty
+                    if (currentChunk) parts.push(currentChunk);
+                }
+                
+                console.log(`Split text into ${parts.length} parts for processing`);
+                
+                // If using iOS 18+ with HTML5 Audio, we can't easily combine buffers
+                // Just play the first part to avoid complex audio handling
+                if (this.isIOS18Plus && !this.audioContext) {
+                    console.log('iOS 18+ without WebAudio: Playing only first part');
+                    const result = await this.synthesizeSpeech(parts[0], voiceId);
+                    
+                    if (result && result.source) {
+                        if (result.source.start && !this.isIOS18Plus) {
+                            result.source.start(0);
+                        }
+                        
+                        // Estimate full duration based on first part
+                        const estimatedFullDuration = (result.duration / parts[0].length) * text.length;
+                        console.log(`Estimated full speech duration: ${estimatedFullDuration}ms`);
+                        return estimatedFullDuration;
+                    }
+                    return 0;
+                }
+                
+                // For WebAudio, we can concatenate buffers for seamless playback
+                // Process all parts and combine them into one audio buffer
+                if (this.audioContext) {
+                    try {
+                        // Process each part in sequence to get audio data
+                        let totalDuration = 0;
+                        let allAudioData = [];
+                        
+                        for (const part of parts) {
+                            console.log(`Processing speech part (${part.length} chars)...`);
+                            // Get audio data from ElevenLabs without playing it
+                            const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'xi-api-key': this.apiKey
+                                },
+                                body: JSON.stringify({
+                                    text: part,
+                                    model_id: "eleven_monolingual_v1",
+                                    voice_settings: {
+                                        stability: 0.5,
+                                        similarity_boost: 0.75
+                                    }
+                                })
+                            });
+                            
+                            if (!response.ok) {
+                                throw new Error(`ElevenLabs API error: ${response.status}`);
+                            }
+                            
+                            const audioData = await response.arrayBuffer();
+                            allAudioData.push(audioData);
+                        }
+                        
+                        // Decode and combine all audio data
+                        let totalLength = 0;
+                        const audioBuffers = [];
+                        
+                        for (const audioData of allAudioData) {
+                            const buffer = await this.audioContext.decodeAudioData(audioData);
+                            audioBuffers.push(buffer);
+                            totalLength += buffer.length;
+                        }
+                        
+                        // Create a combined buffer
+                        const combinedBuffer = this.audioContext.createBuffer(
+                            audioBuffers[0].numberOfChannels,
+                            totalLength,
+                            audioBuffers[0].sampleRate
+                        );
+                        
+                        // Copy data from individual buffers to combined buffer
+                        for (let i = 0; i < audioBuffers[0].numberOfChannels; i++) {
+                            const channel = combinedBuffer.getChannelData(i);
+                            let offset = 0;
+                            
+                            for (const buffer of audioBuffers) {
+                                channel.set(buffer.getChannelData(i), offset);
+                                offset += buffer.length;
+                            }
+                        }
+                        
+                        // Create and play the combined source
+                        const source = this.audioContext.createBufferSource();
+                        source.buffer = combinedBuffer;
+                        source.connect(this.audioContext.destination);
+                        
+                        // Ensure audio context is running before playing
+                        if (this.audioContext.state !== 'running') {
+                            await this.audioContext.resume();
+                        }
+                        
+                        // Start playback
+                        source.start(0);
+                        
+                        // Calculate total duration
+                        const totalCombinedDuration = combinedBuffer.duration * 1000;
+                        console.log(`Combined speech playback started, duration: ${totalCombinedDuration}ms`);
+                        return totalCombinedDuration;
+                    } catch (e) {
+                        console.error('Error combining audio buffers:', e);
+                        // Fall back to standard processing with just the first part
+                        console.log('Falling back to processing first part only');
+                    }
+                }
+            }
+            
+            // Standard processing for normal-length text or fallback
+            console.log('Sending speech request to ElevenLabs...');
+            
+            // Ensure audio context is running if using WebAudio
             if (this.audioContext && this.audioContext.state === 'suspended') {
                 console.log('Resuming audio context before speech...');
                 await this.audioContext.resume();
-                
-                if (this.audioContext.state !== 'running') {
-                    console.warn('Failed to resume audio context for speech');
-                    if (this.isIOS || this.isMobile) {
-                        await this._unlockAudioiOS();
-                    }
-                }
             }
             
             const result = await this.synthesizeSpeech(text, voiceId);
@@ -365,6 +577,7 @@ class VoiceSynthesis {
                 console.log(`Speech playback started, duration: ${result.duration}ms`);
                 return result.duration;
             }
+            console.warn('Speech synthesis returned null result');
             return 0;
         } catch (error) {
             console.error('Error playing speech:', error);

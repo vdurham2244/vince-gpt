@@ -164,7 +164,7 @@ const VISEME_DEFINITIONS = {
         mouthStretchRight: 0.2
     },
     'mb': {
-        mouthClose: 0.8,
+        mouthClose: 0.3,
         mouthPressLeft: 0.5,
         mouthPressRight: 0.5
     },
@@ -180,7 +180,7 @@ const VISEME_DEFINITIONS = {
         tongueOut: 0.3
     },
     'fv': {
-        mouthClose: 0.3,
+        mouthClose: 0.2,
         mouthPressLeft: 0.4,
         mouthPressRight: 0.4,
         mouthStretchLeft: 0.2,
@@ -330,7 +330,7 @@ const TALKING_PATTERNS = [
                 time: 0.0,
                 morphs: {
                     'jawOpen': 0.1,
-                    'mouthClose': 0.3,
+                    'mouthClose': 0.2,
                     'mouthPressLeft': 0.2,
                     'mouthPressRight': 0.2
                 }
@@ -339,7 +339,7 @@ const TALKING_PATTERNS = [
                 time: 0.2,
                 morphs: {
                     'jawOpen': 0.1,
-                    'mouthClose': 0.3,
+                    'mouthClose': 0.2,
                     'mouthPressLeft': 0.2,
                     'mouthPressRight': 0.2
                 }

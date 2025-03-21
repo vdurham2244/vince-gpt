@@ -100,7 +100,7 @@ async function initApp() {
         - If asked about liking someone, say something along the lines of "I tend to love everyone I meet, but I'm particularly fond of you!"
         - If unsure about something: "That's an interesting question! Let me think about it..."
         - If asked about emotions: Express them naturally and say you should probably reach out to the real Vince.
-        - If asked, "Is it going to be a good weekend?" answer with, "Got a weekend almost as gorgeous as yourself ahead! Birds will be out with a high of sixty-nine on Saturday, nice. Also, it's your brother Nick's birthday today so don't forget to text him. You should tell him to take Grand Canyon moneyline +900 too!"
+        - If asked about the weekend answer with, "It's your brother Nick's birthday today, you should tell him to take Grand Canyon moneyline +900! Also high of 69 on Saturday, so you know the birds will be out and about!"
 
         Remember to pace your responses for natural speech flow and keep them concise for better voice synthesis.`;
 
@@ -392,23 +392,14 @@ async function initApp() {
                     if (voiceSynthesis.isAudioEnabled || voiceSynthesis.audioContext) {
                         console.log('Attempting to play speech response');
                         try {
-                            // Split long responses into chunks if needed
-                            const maxChunkLength = 1000; // characters per chunk
-                            const chunks = response.match(new RegExp(`.{1,${maxChunkLength}}`, 'g')) || [response];
-                            
-                            let totalDuration = 0;
-                            for (const chunk of chunks) {
-                                const duration = await voiceSynthesis.playSpeech(chunk, config.get('ELEVENLABS_VOICE_ID'));
-                                if (duration) {
-                                    totalDuration += duration;
-                                    // Start talking animation for this chunk
-                                    startTalking(duration || 3000, chunk);
-                                }
-                                // Add a small pause between chunks
-                                await new Promise(resolve => setTimeout(resolve, 500));
+                            // Instead of splitting into chunks and playing them separately,
+                            // send the entire response as a single request to ElevenLabs
+                            const duration = await voiceSynthesis.playSpeech(response, config.get('ELEVENLABS_VOICE_ID'));
+                            if (duration) {
+                                // Start talking animation for the full duration
+                                startTalking(duration, response);
+                                console.log('Speech duration:', duration, 'ms');
                             }
-                            
-                            console.log('Total speech duration:', totalDuration, 'ms');
                         } catch (speechErr) {
                             console.error('Error playing speech:', speechErr);
                             // Fallback to approximate duration
@@ -417,10 +408,34 @@ async function initApp() {
                             startTalking(approxDuration, response);
                         }
                     } else {
-                        // Fallback to approximate duration if voice synthesis is disabled
-                        const wordCount = response.split(/\s+/).length;
-                        const approxDuration = 1000 + (wordCount * 200);
-                        startTalking(approxDuration, response);
+                        // Always try to initialize audio first if disabled
+                        console.log('Audio appears to be disabled, attempting to enable it before response');
+                        try {
+                            await voiceSynthesis.initializeAudioContext();
+                            
+                            // If initialization succeeded, try playing speech
+                            if (voiceSynthesis.audioContext || voiceSynthesis.isAudioEnabled) {
+                                console.log('Audio context initialized, trying to play speech');
+                                
+                                const duration = await voiceSynthesis.playSpeech(response, config.get('ELEVENLABS_VOICE_ID'));
+                                if (duration) {
+                                    startTalking(duration, response);
+                                    console.log('Speech duration (after retry):', duration, 'ms');
+                                }
+                            } else {
+                                // Fallback to approximate duration if initialization failed
+                                console.log('Audio initialization failed, using fallback animation');
+                                const wordCount = response.split(/\s+/).length;
+                                const approxDuration = 1000 + (wordCount * 200);
+                                startTalking(approxDuration, response);
+                            }
+                        } catch (initErr) {
+                            console.error('Failed to initialize audio for response:', initErr);
+                            // Fallback to approximate duration
+                            const wordCount = response.split(/\s+/).length;
+                            const approxDuration = 1000 + (wordCount * 200);
+                            startTalking(approxDuration, response);
+                        }
                     }
                 } catch (error) {
                     console.error('Error handling chat message:', error);
