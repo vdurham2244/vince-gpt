@@ -75,6 +75,127 @@ let idleExpressionCount = 0;
 let lastIdleAction = Date.now();
 const IDLE_CHECK_INTERVAL = 15000; // 15 seconds of idle time
 
+// Phoneme to viseme mapping
+const PHONEME_TO_VISEME = {
+    // Vowels
+    'AA': 'ah',  // "father"
+    'AE': 'ah',  // "cat"
+    'AH': 'ah',  // "but"
+    'AO': 'oh',  // "dog"
+    'AW': 'oh',  // "cow"
+    'AY': 'ah',  // "hide"
+    'EH': 'eh',  // "bed"
+    'ER': 'er',  // "bird"
+    'EY': 'eh',  // "say"
+    'IH': 'ih',  // "bid"
+    'IY': 'ih',  // "bee"
+    'OW': 'oh',  // "show"
+    'OY': 'oh',  // "toy"
+    'UH': 'oh',  // "good"
+    'UW': 'uw',  // "two"
+    
+    // Consonants
+    'B': 'mb',   // "bed"
+    'CH': 'ch',  // "cheese"
+    'D': 'th',   // "dig"
+    'DH': 'th',  // "this"
+    'F': 'fv',   // "fan"
+    'G': 'kg',   // "game"
+    'HH': 'ah',  // "help"
+    'JH': 'ch',  // "joy"
+    'K': 'kg',   // "key"
+    'L': 'th',   // "lie"
+    'M': 'mb',   // "mom"
+    'N': 'th',   // "noon"
+    'NG': 'kg',  // "sing"
+    'P': 'mb',   // "pop"
+    'R': 'er',   // "red"
+    'S': 'ss',   // "see"
+    'SH': 'ch',  // "she"
+    'T': 'th',   // "tea"
+    'TH': 'th',  // "thin"
+    'V': 'fv',   // "van"
+    'W': 'uw',   // "way"
+    'Y': 'ih',   // "yard"
+    'Z': 'ss',   // "zoo"
+    'ZH': 'ch'   // "vision"
+};
+
+// Viseme definitions with FACS blendshapes
+const VISEME_DEFINITIONS = {
+    'ah': {
+        mouthOpen: 0.7,
+        jawOpen: 0.7,
+        mouthFunnel: 0.1,
+        mouthStretchLeft: 0.2,
+        mouthStretchRight: 0.2
+    },
+    'oh': {
+        mouthOpen: 0.4,
+        jawOpen: 0.4,
+        mouthPucker: 0.7,
+        mouthFunnel: 0.3
+    },
+    'eh': {
+        mouthOpen: 0.3,
+        jawOpen: 0.3,
+        mouthStretchLeft: 0.4,
+        mouthStretchRight: 0.4,
+        mouthSmileLeft: 0.2,
+        mouthSmileRight: 0.2
+    },
+    'ih': {
+        mouthOpen: 0.2,
+        jawOpen: 0.2,
+        mouthStretchLeft: 0.6,
+        mouthStretchRight: 0.6
+    },
+    'uw': {
+        mouthOpen: 0.2,
+        jawOpen: 0.2,
+        mouthPucker: 0.8,
+        mouthFunnel: 0.4
+    },
+    'er': {
+        mouthOpen: 0.3,
+        jawOpen: 0.3,
+        mouthFunnel: 0.3,
+        mouthStretchLeft: 0.2,
+        mouthStretchRight: 0.2
+    },
+    'mb': {
+        mouthClose: 0.8,
+        mouthPressLeft: 0.5,
+        mouthPressRight: 0.5
+    },
+    'ch': {
+        mouthOpen: 0.2,
+        jawOpen: 0.2,
+        mouthPucker: 0.4,
+        mouthFunnel: 0.6
+    },
+    'th': {
+        mouthOpen: 0.1,
+        jawOpen: 0.1,
+        tongueOut: 0.3
+    },
+    'fv': {
+        mouthClose: 0.3,
+        mouthPressLeft: 0.4,
+        mouthPressRight: 0.4,
+        mouthStretchLeft: 0.2,
+        mouthStretchRight: 0.2
+    },
+    'ss': {
+        mouthOpen: 0.2,
+        jawOpen: 0.1,
+        mouthStretchLeft: 0.5,
+        mouthStretchRight: 0.5,
+        mouthSmileLeft: 0.3,
+        mouthSmileRight: 0.3
+    }
+};
+
 // Enhanced talking patterns combining natural movements with phonemes
 const TALKING_PATTERNS = [
     {
@@ -433,39 +554,48 @@ function findAvailableMorphTargets(morphTargetDictionary) {
     return availableMorphs;
 }
 
-// Generate enhanced talking sequence
-function generateTalkingSequence(durationMs = 2000, frameRate = 60) {
+// Enhanced talking sequence generator with phoneme support
+function generateTalkingSequence(durationMs = 2000, text = '') {
     const sequence = [];
+    const frameRate = 60;
     const totalFrames = Math.floor(durationMs / 1000 * frameRate);
     const frameDuration = 1000 / frameRate;
-    
-    let currentTime = 0;
-    while (currentTime < durationMs) {
-        const pattern = TALKING_PATTERNS[Math.floor(Math.random() * TALKING_PATTERNS.length)];
-        const patternDuration = pattern.keyframes[pattern.keyframes.length - 1].time * 1000;
+
+    // If no text provided, generate random visemes
+    if (!text) {
+        const visemeKeys = Object.keys(VISEME_DEFINITIONS);
+        let currentTime = 0;
         
-        pattern.keyframes.forEach(keyframe => {
-            const frameTime = currentTime + (keyframe.time * 1000);
-            const frameIndex = Math.floor(frameTime / frameDuration);
+        while (currentTime < durationMs) {
+            const viseme = visemeKeys[Math.floor(Math.random() * visemeKeys.length)];
+            const visemeDuration = 100 + Math.random() * 150; // 100-250ms per viseme
+            const transitionDuration = 50; // 50ms transition
             
-            if (frameIndex < totalFrames) {
-                // Add natural variation to each frame
-                const morphs = { ...keyframe.morphs };
-                Object.keys(morphs).forEach(key => {
-                    morphs[key] *= 0.8 + Math.random() * 0.4; // Add 20% random variation
-                });
-                
-                sequence[frameIndex] = {
-                    time: frameTime,
-                    morphs: morphs
-                };
-            }
-        });
+            // Add keyframes for this viseme
+            addVisemeKeyframes(sequence, currentTime, visemeDuration, transitionDuration, 
+                             VISEME_DEFINITIONS[viseme], frameRate);
+            
+            currentTime += visemeDuration;
+        }
+    } else {
+        // TODO: Add text-to-phoneme conversion and timing
+        // For now, use the same random generation
+        const visemeKeys = Object.keys(VISEME_DEFINITIONS);
+        let currentTime = 0;
         
-        currentTime += patternDuration + Math.random() * 100; // Add natural pauses
+        while (currentTime < durationMs) {
+            const viseme = visemeKeys[Math.floor(Math.random() * visemeKeys.length)];
+            const visemeDuration = 100 + Math.random() * 150;
+            const transitionDuration = 50;
+            
+            addVisemeKeyframes(sequence, currentTime, visemeDuration, transitionDuration, 
+                             VISEME_DEFINITIONS[viseme], frameRate);
+            
+            currentTime += visemeDuration;
+        }
     }
-    
-    // Fill gaps and smooth transitions
+
+    // Fill any gaps in the sequence
     let lastFrame = null;
     for (let i = 0; i < totalFrames; i++) {
         if (!sequence[i]) {
@@ -487,8 +617,59 @@ function generateTalkingSequence(durationMs = 2000, frameRate = 60) {
             lastFrame = sequence[i];
         }
     }
-    
+
     return sequence;
+}
+
+// Helper function to add viseme keyframes with smooth transitions
+function addVisemeKeyframes(sequence, startTime, duration, transitionDuration, visemeDefinition, frameRate) {
+    const frameDuration = 1000 / frameRate;
+    
+    // Convert times to frame indices
+    const startFrame = Math.floor(startTime / frameDuration);
+    const endFrame = Math.floor((startTime + duration) / frameDuration);
+    const transitionFrames = Math.floor(transitionDuration / frameDuration);
+    
+    // Add transition in
+    for (let i = 0; i < transitionFrames; i++) {
+        const frame = startFrame + i;
+        const progress = i / transitionFrames;
+        const morphs = {};
+        
+        Object.entries(visemeDefinition).forEach(([morphName, targetValue]) => {
+            const currentValue = sequence[frame - 1]?.morphs[morphName] || 0;
+            morphs[morphName] = currentValue + (targetValue - currentValue) * progress;
+        });
+        
+        sequence[frame] = {
+            time: frame * frameDuration,
+            morphs: morphs
+        };
+    }
+    
+    // Hold the viseme
+    for (let frame = startFrame + transitionFrames; frame < endFrame - transitionFrames; frame++) {
+        sequence[frame] = {
+            time: frame * frameDuration,
+            morphs: { ...visemeDefinition }
+        };
+    }
+    
+    // Add transition out
+    for (let i = 0; i < transitionFrames; i++) {
+        const frame = endFrame - transitionFrames + i;
+        const progress = i / transitionFrames;
+        const morphs = {};
+        
+        Object.entries(visemeDefinition).forEach(([morphName, value]) => {
+            morphs[morphName] = value * (1 - progress);
+        });
+        
+        sequence[frame] = {
+            time: frame * frameDuration,
+            morphs: morphs
+        };
+    }
 }
 
 // Apply frame from the talking sequence to the model's morph targets

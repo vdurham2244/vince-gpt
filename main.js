@@ -303,7 +303,7 @@ async function initApp() {
         const chatInput = document.getElementById('chat-input');
         const sendButton = document.getElementById('send-button');
 
-        function startTalking(durationMs = 2000) {
+        function startTalking(durationMs = 2000, text = '') {
             if (!morphTargetInfluences || Object.keys(availableMorphs).length === 0) {
                 console.warn('Cannot start talking animation: No morph targets available');
                 return;
@@ -313,11 +313,11 @@ async function initApp() {
             talkingStartTime = Date.now();
             talkingDuration = durationMs;
             
-            // Generate a new talking sequence
-            currentTalkingSequence = generateTalkingSequence(durationMs);
+            // Generate a new talking sequence with the text
+            currentTalkingSequence = generateTalkingSequence(durationMs, text);
             currentFrame = 0;
             
-            console.log(`Started talking animation for ${durationMs}ms`);
+            console.log(`Started talking animation for ${durationMs}ms with text: "${text}"`);
         }
 
         function stopTalking() {
@@ -390,27 +390,27 @@ async function initApp() {
                         console.log('Attempting to play speech response');
                         try {
                             const duration = await voiceSynthesis.playSpeech(response, config.get('ELEVENLABS_VOICE_ID'));
-                            // Start the face animation with the exact duration of the speech
-                            startTalking(duration || 3000); // Fallback duration if 0 is returned
+                            // Start the face animation with the exact duration of the speech and the response text
+                            startTalking(duration || 3000, response); // Pass the response text
                         } catch (speechErr) {
                             console.error('Error playing speech:', speechErr);
                             // Fallback to approximate duration
                             const wordCount = response.split(/\s+/).length;
                             const approxDuration = 1000 + (wordCount * 200);
-                            startTalking(approxDuration);
+                            startTalking(approxDuration, response); // Pass the response text
                         }
                     } else {
                         // Fallback to approximate duration if voice synthesis is disabled
                         const wordCount = response.split(/\s+/).length;
                         const approxDuration = 1000 + (wordCount * 200);
-                        startTalking(approxDuration);
+                        startTalking(approxDuration, response); // Pass the response text
                     }
                 } catch (error) {
                     console.error('Error handling chat message:', error);
                     // Fallback to approximate duration if voice synthesis fails
                     const wordCount = message.split(/\s+/).length;
                     const approxDuration = 1000 + (wordCount * 200);
-                    startTalking(approxDuration);
+                    startTalking(approxDuration, message); // Pass the message text as fallback
                 }
             }
         }
